@@ -11,26 +11,38 @@ prescription still cheaper after its $20-higher premium?
 
 Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo=1`
 
-## Features (v0.1)
+## Features (v0.2)
 
 - Compare any number of plans: premium (monthly or per-paycheck), deductible,
   out-of-pocket max, employer HSA/HRA contribution, PCP/specialist/urgent-care
-  copays, and four prescription tiers
+  visits, and four prescription tiers
+- Every cost has a **rule**: flat copay or % coinsurance, before or after the
+  deductible — so PPOs and high-deductible plans are modeled the way they
+  actually work
+- **Month-by-month simulation**: "after deductible" costs are charged at full
+  price until the deductible is met, then the copay/coinsurance applies, and
+  everything stops at the out-of-pocket max
+- **Cumulative-cost chart** — one line per plan across the plan year, with a
+  hover readout, so you can see exactly where one plan overtakes another
+- **What-if slider**: add unexpected billed care (an ER visit, a procedure) and
+  watch whether the winner flips; the tipping-point line tells you the exact
+  dollar amount where it does
 - Prescriptions with per-plan tier assignment (the same drug is often a
-  different tier under different insurers) or an exact custom cost per fill
+  different tier under different insurers), an optional retail price per fill
+  (used by deductible/coinsurance rules), or an exact custom cost
 - Winner banner explaining the annual savings and where they come from
 - Sortable comparison table, plus a per-prescription cost table by plan
 - Worst-case-year column: premiums + out-of-pocket max − employer HSA money
 - All data stays in your browser (localStorage). Export/Import JSON for backup
-- Demo mode (`?demo=1`) with two sample plans — changes aren't saved
+- Demo mode (`?demo=1`) with a PPO-vs-HDHP sample — changes aren't saved
 
-## What v0.1 does *not* do yet
+## Model notes
 
-v0.1 compares the copay amounts you enter directly. It does **not** simulate
-deductible timing (paying full price until the deductible is met, then copays,
-capped at the out-of-pocket max). For high-deductible plans, enter your best
-estimate of what a visit or fill really costs you. A month-by-month deductible
-simulation with a cumulative-cost chart is planned for v0.2.
+Visits and fills are spread evenly across the year (expected-value math), so
+the deductible crossover lands where it would on average. Retail prices are
+your estimates — GoodRx or a pharmacy receipt for drugs, and rough national
+figures for visit prices (defaults provided). The result is a fair comparison
+between plans, not a billing-accurate forecast.
 
 ## Privacy
 
@@ -38,6 +50,19 @@ No accounts, no server, no analytics. Health and cost data never leaves your
 browser unless you export it yourself.
 
 ## Changelog
+
+### v0.2.0 — 2026-07-07
+
+The deductible update. v0.1 compared copays directly, which quietly favored
+high-deductible plans — it ignored the months where you pay full price before
+the deductible is met. v0.2 simulates the whole plan year month by month:
+each cost now carries a rule (copay or coinsurance, before or after the
+deductible), spending accrues to the deductible and stops at the out-of-pocket
+max, and a chart shows each plan's cumulative cost so crossovers are visible.
+Also new: a what-if slider for unexpected care with an exact tipping-point
+readout, retail prices on prescriptions, and editable full-price assumptions
+for visits. Existing saved data upgrades in place (everything defaults to
+plain copay rules, matching v0.1 behavior).
 
 ### v0.1.0 — 2026-07-07
 

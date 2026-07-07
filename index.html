@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="app-version" content="0.1.0">
+<meta name="app-version" content="0.2.0">
 <meta name="description" content="Compare the real monthly and annual cost of health insurance plans: premiums, prescriptions, and office visits side by side.">
 <title>Copay — health plan cost estimator</title>
 <style>
@@ -100,7 +100,7 @@ footer a{color:var(--accent)}
 
   <section>
     <h2>Your plans</h2>
-    <p class="sub">Everything here is on your plan's Summary of Benefits and Coverage (SBC) sheet. v0.1 compares copay amounts directly; deductible timing simulation comes in v0.2.</p>
+    <p class="sub">Everything here is on your plan's Summary of Benefits and Coverage (SBC) sheet. Costs marked "after deductible" are charged at full price until the deductible is met — the simulation handles that month by month.</p>
     <div class="cards" id="planCards"></div>
     <div style="margin-top:12px"><button class="primary" id="addPlanBtn">Add plan</button></div>
   </section>
@@ -128,7 +128,7 @@ footer a{color:var(--accent)}
 
 <script>
 "use strict";
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 const LS_KEY = "copay_v1";
 const TIERS = [
   ["t1","Tier 1 — Generic"],
@@ -142,10 +142,32 @@ const PREMIUM_PERIODS = [
   ["biweekly","per paycheck (every 2 weeks, 26/yr)",26/12],
   ["semimonthly","per paycheck (twice a month, 24/yr)",2]
 ];
+const MODES = [
+  ["copay","$ copay (no deductible)"],
+  ["copay_ded","$ copay after deductible"],
+  ["coins","% coinsurance (no deductible)"],
+  ["coins_ded","% coinsurance after deductible"]
+];
+const SHARE_KEYS = ["pcp","spec","uc","t1","t2","t3","t4"];
+const ASSUME_DEFAULTS = { pcpCost:180, specCost:300, ucCost:200 };
+/* categorical series colors — dataviz reference palette, validated on white */
+const SERIES = ["#2a78d6","#1baf7a","#eda100","#008300","#4a3aa7","#e34948"];
 
 const DEMO = window.location.search.indexOf("demo=1") !== -1;
 
-let state = { plans: [], rxs: [], visits: { pcp: 3, spec: 0, uc: 1 } };
+let state = { plans: [], rxs: [], visits: { pcp: 3, spec: 0, uc: 1 }, assume: Object.assign({}, ASSUME_DEFAULTS) };
+let whatIf = 0; /* extra billed care this year, from the what-if slider (not persisted) */
+
+function migrate(st){
+  st.assume = Object.assign({}, ASSUME_DEFAULTS, st.assume || {});
+  for (const p of st.plans || []){
+    const mode = {};
+    for (const k of SHARE_KEYS) mode[k] = (p.mode && p.mode[k]) || "copay";
+    p.mode = mode;
+    if (p.coins == null) p.coins = 20;
+  }
+  return st;
+}
 
 function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+"-"+Math.random().toString(36).slice(2)); }
 function fmt(n){ return (n<0?"-":"") + "$" + Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -157,6 +179,7 @@ function load(){
     const raw = localStorage.getItem(LS_KEY);
     if (raw) state = Object.assign({plans:[],rxs:[],visits:{pcp:0,spec:0,uc:0}}, JSON.parse(raw));
   }catch(e){ console.error("load failed", e); }
+  migrate(state);
 }
 function save(){
   if (DEMO) return;
@@ -166,20 +189,23 @@ function save(){
 
 function demoData(){
   const a = uid(), b = uid();
-  return {
+  return migrate({
     plans: [
-      { id:a, name:"Acme PPO 500", premium:235, period:"monthly", deductible:500, oopMax:4500, hsa:0,
-        pcp:25, spec:50, uc:60, rx:{t1:10,t2:35,t3:65,t4:150} },
-      { id:b, name:"Acme HDHP Saver", premium:152, period:"monthly", deductible:3200, oopMax:6000, hsa:750,
-        pcp:60, spec:120, uc:95, rx:{t1:15,t2:55,t3:95,t4:200} }
+      { id:a, name:"Acme PPO 500", premium:235, period:"monthly", deductible:500, oopMax:4500, hsa:0, coins:20,
+        pcp:25, spec:50, uc:60, rx:{t1:10,t2:35,t3:65,t4:150},
+        mode:{pcp:"copay",spec:"copay",uc:"copay",t1:"copay",t2:"copay",t3:"copay",t4:"copay"} },
+      { id:b, name:"Acme HDHP Saver", premium:152, period:"monthly", deductible:3200, oopMax:6000, hsa:750, coins:20,
+        pcp:20, spec:20, uc:20, rx:{t1:15,t2:55,t3:95,t4:25},
+        mode:{pcp:"coins_ded",spec:"coins_ded",uc:"coins_ded",t1:"copay_ded",t2:"copay_ded",t3:"copay_ded",t4:"coins_ded"} }
     ],
     rxs: [
-      { id:uid(), name:"Atorvastatin 20 mg", fillsPerMonth:1, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t1"} } },
-      { id:uid(), name:"Eliquis 5 mg", fillsPerMonth:1, perPlan:{ [a]:{tier:"t2"}, [b]:{tier:"t3"} } },
-      { id:uid(), name:"Albuterol inhaler", fillsPerMonth:0.5, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t2"} } }
+      { id:uid(), name:"Atorvastatin 20 mg", fillsPerMonth:1, retail:25, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t1"} } },
+      { id:uid(), name:"Eliquis 5 mg", fillsPerMonth:1, retail:550, perPlan:{ [a]:{tier:"t2"}, [b]:{tier:"t3"} } },
+      { id:uid(), name:"Albuterol inhaler", fillsPerMonth:0.5, retail:90, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t2"} } }
     ],
-    visits: { pcp:3, spec:2, uc:1 }
-  };
+    visits: { pcp:3, spec:2, uc:1 },
+    assume: { pcpCost:180, specCost:300, ucCost:200 }
+  });
 }
 
 /* ---------- tiny DOM helpers ---------- */
@@ -234,24 +260,71 @@ function monthlyPremium(p){
   const per = PREMIUM_PERIODS.find(x=>x[0]===p.period) || PREMIUM_PERIODS[0];
   return num(p.premium) * per[2];
 }
-function rxCostPerFill(rx, plan){
-  const cfg = (rx.perPlan && rx.perPlan[plan.id]) || { tier:"t1" };
-  if (cfg.tier === "custom") return num(cfg.customCost);
-  return num(plan.rx && plan.rx[cfg.tier]);
+/* One event's member cost. copayTotal = count × copay $, C = count × retail price,
+   pct = coinsurance %. Deductible dollars and cost shares both accrue to the OOP cap. */
+function payEvent(st, mode, copayTotal, C, pct){
+  let pay;
+  if (mode === "copay") pay = copayTotal;
+  else if (mode === "coins") pay = pct/100 * C;
+  else {
+    const rem = Math.max(0, st.ded - st.dedPaid);
+    const dedPart = Math.min(C, rem);
+    st.dedPaid += dedPart;
+    if (mode === "copay_ded") pay = dedPart + copayTotal * (C > 0 ? (C - dedPart)/C : 0);
+    else pay = dedPart + pct/100 * Math.max(0, C - dedPart);
+  }
+  const capped = Math.min(pay, Math.max(0, st.oopMax - st.oopPaid));
+  st.oopPaid += capped;
+  return capped;
 }
-function totals(plan){
+
+/* Month-by-month simulation of one plan year. Rules that need a retail price
+   but don't have one degrade to plain copay (amount = what you pay). */
+function simulate(plan, extraAnnual){
   const prem = monthlyPremium(plan);
-  let rxMo = 0;
-  for (const rx of state.rxs) rxMo += num(rx.fillsPerMonth) * rxCostPerFill(rx, plan);
-  const v = state.visits;
-  const visMo = (num(v.pcp)*num(plan.pcp) + num(v.spec)*num(plan.spec) + num(v.uc)*num(plan.uc)) / 12;
-  const hsaMo = num(plan.hsa) / 12;
-  const totalMo = prem + rxMo + visMo - hsaMo;
-  return {
-    prem, rxMo, visMo, hsaMo, totalMo,
-    totalYr: totalMo * 12,
-    worstYr: prem*12 + num(plan.oopMax) - num(plan.hsa)
-  };
+  const hsaMo = num(plan.hsa)/12;
+  const st = { ded: num(plan.deductible), dedPaid: 0,
+               oopMax: num(plan.oopMax) > 0 ? num(plan.oopMax) : Infinity, oopPaid: 0 };
+  let rxPaid = 0, visPaid = 0, extraPaid = 0, running = 0;
+  const cum = [];
+  for (let m = 0; m < 12; m++){
+    let mo = 0;
+    for (const rx of state.rxs){
+      const count = num(rx.fillsPerMonth);
+      if (!count) continue;
+      const cfg = (rx.perPlan && rx.perPlan[plan.id]) || { tier:"t1" };
+      let paid;
+      if (cfg.tier === "custom"){
+        paid = payEvent(st, "copay", count*num(cfg.customCost), 0, 0);
+      } else {
+        const amt = num(plan.rx && plan.rx[cfg.tier]);
+        let mode = plan.mode[cfg.tier] || "copay";
+        const retail = num(rx.retail);
+        if (mode !== "copay" && retail <= 0) mode = "copay";
+        paid = payEvent(st, mode, count*amt, count*retail, amt);
+      }
+      rxPaid += paid; mo += paid;
+    }
+    for (const k of ["pcp","spec","uc"]){
+      const count = num(state.visits[k])/12;
+      if (!count) continue;
+      const amt = num(plan[k]);
+      const retail = num(state.assume[k+"Cost"]);
+      let mode = plan.mode[k] || "copay";
+      if (mode !== "copay" && retail <= 0) mode = "copay";
+      const paid = payEvent(st, mode, count*amt, count*retail, amt);
+      visPaid += paid; mo += paid;
+    }
+    if (extraAnnual > 0){
+      const paid = payEvent(st, "coins_ded", 0, extraAnnual/12, num(plan.coins));
+      extraPaid += paid; mo += paid;
+    }
+    running += prem + mo - hsaMo;
+    cum.push(running);
+  }
+  return { prem, hsaMo, rxMo: rxPaid/12, visMo: visPaid/12, extraMo: extraPaid/12,
+           totalMo: running/12, totalYr: running, cum,
+           worstYr: prem*12 + num(plan.oopMax) - num(plan.hsa) };
 }
 
 /* ---------- sortable tables ---------- */
@@ -280,9 +353,10 @@ function makeSortable(table){
 }
 
 /* ---------- plan modal ---------- */
+const RULE_HINT = "How this cost is shared. \"$ copay\" = flat amount per visit/fill. \"% coinsurance\" = you pay that percent of the price. \"after deductible\" = you pay full price until the deductible is met, then this rule applies (typical for HDHPs). Check the plan's SBC sheet.";
 function planModal(existing){
-  const p = existing || { name:"", premium:"", period:"monthly", deductible:"", oopMax:"", hsa:"",
-                          pcp:"", spec:"", uc:"", rx:{t1:"",t2:"",t3:"",t4:""} };
+  const p = existing || migrate({plans:[{ name:"", premium:"", period:"monthly", deductible:"", oopMax:"", hsa:"",
+                          pcp:"", spec:"", uc:"", rx:{t1:"",t2:"",t3:"",t4:""} }]}).plans[0];
   const inName = h("input", {value:p.name, placeholder:"e.g. BCBS PPO 500"});
   const inPrem = h("input", {type:"number", min:"0", step:"0.01", value:p.premium});
   const inPeriod = h("select", null, ...PREMIUM_PERIODS.map(([v,l])=>{
@@ -291,12 +365,18 @@ function planModal(existing){
   const inDed = h("input", {type:"number", min:"0", step:"1", value:p.deductible});
   const inOop = h("input", {type:"number", min:"0", step:"1", value:p.oopMax});
   const inHsa = h("input", {type:"number", min:"0", step:"1", value:p.hsa});
-  const inPcp = h("input", {type:"number", min:"0", step:"0.01", value:p.pcp});
-  const inSpec = h("input", {type:"number", min:"0", step:"0.01", value:p.spec});
-  const inUc = h("input", {type:"number", min:"0", step:"0.01", value:p.uc});
-  const rxIn = {};
-  for (const t of ["t1","t2","t3","t4"]) rxIn[t] = h("input", {type:"number", min:"0", step:"0.01", value:(p.rx&&p.rx[t])!=null?p.rx[t]:""});
-
+  const inCoins = h("input", {type:"number", min:"0", max:"100", step:"1", value:p.coins});
+  const amtIn = {}, modeIn = {};
+  function shareRow(key, label, amtVal, amtHint){
+    amtIn[key] = h("input", {type:"number", min:"0", step:"0.01", value:amtVal!=null?amtVal:""});
+    modeIn[key] = h("select", null, ...MODES.map(([v,l])=>{
+      const o = h("option", {value:v}, l); if (v===(p.mode[key]||"copay")) o.selected = true; return o;
+    }));
+    return h("div", {class:"grid2"},
+      field(label, amtIn[key], amtHint),
+      field("Rule", modeIn[key], RULE_HINT)
+    );
+  }
   const body = h("div", null,
     h("div", {class:"grid2", style:"margin-bottom:12px"},
       field("Plan name", inName, "Any label that helps you tell the plans apart."),
@@ -310,25 +390,22 @@ function planModal(existing){
     ),
     h("fieldset", null, h("legend", null, "Plan limits"),
       h("div", {class:"grid3"},
-        field("Deductible ($)", inDed, "What you pay out of pocket before the plan starts sharing costs. Used for the worst-case column in v0.1; full simulation comes in v0.2."),
-        field("Out-of-pocket max ($)", inOop, "The most you can pay for covered care in a year, not counting premiums. Caps your worst case."),
-        field("HSA/HRA from employer ($/yr)", inHsa, "Free money your employer puts in a health account each year. It directly offsets your costs — common with high-deductible plans.")
+        field("Deductible ($)", inDed, "What you pay out of pocket before the plan starts sharing costs. The simulation charges full price to \"after deductible\" items until this is met."),
+        field("Out-of-pocket max ($)", inOop, "The most you can pay for covered care in a year, not counting premiums. The simulation stops charging you here."),
+        field("HSA/HRA from employer ($/yr)", inHsa, "Free money your employer puts in a health account each year. It directly offsets your costs — common with high-deductible plans."),
+        field("Coinsurance for other care (%)", inCoins, "Your share of costs after the deductible for care not listed here — used by the what-if slider. Typically 10–30%.")
       )
     ),
-    h("fieldset", null, h("legend", null, "Office visits — what you pay per visit"),
-      h("div", {class:"grid3"},
-        field("Primary care ($)", inPcp, "Copay for a regular doctor visit. If the plan makes you pay full price until the deductible, enter your best estimate of the real visit cost."),
-        field("Specialist ($)", inSpec, "Copay for a specialist visit (dermatologist, cardiologist, etc.)."),
-        field("Urgent care ($)", inUc, "Copay for an urgent care visit.")
-      )
+    h("fieldset", null, h("legend", null, "Office visits — amount is $ per visit, or % if the rule is coinsurance"),
+      shareRow("pcp", "Primary care", p.pcp, "Copay $ (or coinsurance %) for a regular doctor visit."),
+      shareRow("spec", "Specialist", p.spec, "Copay $ (or coinsurance %) for a specialist visit (dermatologist, cardiologist, etc.)."),
+      shareRow("uc", "Urgent care", p.uc, "Copay $ (or coinsurance %) for an urgent care visit.")
     ),
-    h("fieldset", null, h("legend", null, "Prescriptions — what you pay per 30-day fill"),
-      h("div", {class:"grid2"},
-        field("Tier 1 — Generic ($)", rxIn.t1, "Cheapest tier: generic drugs."),
-        field("Tier 2 — Preferred brand ($)", rxIn.t2, "Brand-name drugs the plan favors."),
-        field("Tier 3 — Non-preferred ($)", rxIn.t3, "Brand-name drugs the plan does not favor."),
-        field("Tier 4 — Specialty ($)", rxIn.t4, "High-cost specialty drugs; often a percentage — enter the dollar amount you expect to pay.")
-      )
+    h("fieldset", null, h("legend", null, "Prescriptions — amount is $ per 30-day fill, or % if the rule is coinsurance"),
+      shareRow("t1", "Tier 1 — Generic", p.rx&&p.rx.t1, "Cheapest tier: generic drugs."),
+      shareRow("t2", "Tier 2 — Preferred brand", p.rx&&p.rx.t2, "Brand-name drugs the plan favors."),
+      shareRow("t3", "Tier 3 — Non-preferred", p.rx&&p.rx.t3, "Brand-name drugs the plan does not favor."),
+      shareRow("t4", "Tier 4 — Specialty", p.rx&&p.rx.t4, "High-cost specialty drugs; often a coinsurance percentage.")
     )
   );
   const close = openModal(existing ? "Edit plan" : "Add plan", body, [
@@ -338,12 +415,15 @@ function planModal(existing){
   function saveIt(){
     const name = inName.value.trim();
     if (!name){ toast("Give the plan a name"); return; }
+    const mode = {};
+    for (const k of SHARE_KEYS) mode[k] = modeIn[k].value;
     const data = {
       id: existing ? existing.id : uid(),
       name, premium: num(inPrem.value), period: inPeriod.value,
-      deductible: num(inDed.value), oopMax: num(inOop.value), hsa: num(inHsa.value),
-      pcp: num(inPcp.value), spec: num(inSpec.value), uc: num(inUc.value),
-      rx: { t1:num(rxIn.t1.value), t2:num(rxIn.t2.value), t3:num(rxIn.t3.value), t4:num(rxIn.t4.value) }
+      deductible: num(inDed.value), oopMax: num(inOop.value), hsa: num(inHsa.value), coins: num(inCoins.value),
+      pcp: num(amtIn.pcp.value), spec: num(amtIn.spec.value), uc: num(amtIn.uc.value),
+      rx: { t1:num(amtIn.t1.value), t2:num(amtIn.t2.value), t3:num(amtIn.t3.value), t4:num(amtIn.t4.value) },
+      mode
     };
     if (existing) Object.assign(existing, data);
     else state.plans.push(data);
@@ -354,9 +434,10 @@ function planModal(existing){
 
 /* ---------- prescription modal ---------- */
 function rxModal(existing){
-  const r = existing || { name:"", fillsPerMonth:1, perPlan:{} };
+  const r = existing || { name:"", fillsPerMonth:1, retail:"", perPlan:{} };
   const inName = h("input", {value:r.name, placeholder:"e.g. Atorvastatin 20 mg"});
   const inFills = h("input", {type:"number", min:"0", step:"0.1", value:r.fillsPerMonth});
+  const inRetail = h("input", {type:"number", min:"0", step:"0.01", value:r.retail!=null?r.retail:""});
   const perPlanEls = {};
   const planBlocks = state.plans.map(p=>{
     const cfg = (r.perPlan && r.perPlan[p.id]) || { tier:"t1", customCost:"" };
@@ -378,7 +459,9 @@ function rxModal(existing){
   const body = h("div", null,
     h("div", {class:"grid2", style:"margin-bottom:12px"},
       field("Name", inName, null),
-      field("Fills per month", inFills, "1 = monthly refill. A 90-day supply refilled quarterly = 0.33. An as-needed inhaler every other month = 0.5.")
+      field("Fills per month", inFills, "1 = monthly refill. A 90-day supply refilled quarterly = 0.33. An as-needed inhaler every other month = 0.5."),
+      field("Retail price per fill ($)", inRetail, "The full cash/negotiated price of one fill — what you'd pay before the deductible is met. Needed for \"after deductible\" and coinsurance rules; GoodRx or your pharmacy receipt is a good source. Leave blank on pure-copay plans."),
+      null
     ),
     ...(planBlocks.length ? planBlocks : [h("p", {class:"sub"}, "Add a plan first to set per-plan tiers — this prescription will default to Tier 1 on plans added later.")])
   );
@@ -393,7 +476,7 @@ function rxModal(existing){
     for (const pid in perPlanEls){
       perPlan[pid] = { tier: perPlanEls[pid].sel.value, customCost: num(perPlanEls[pid].custom.value) };
     }
-    const data = { id: existing ? existing.id : uid(), name, fillsPerMonth: num(inFills.value), perPlan };
+    const data = { id: existing ? existing.id : uid(), name, fillsPerMonth: num(inFills.value), retail: num(inRetail.value), perPlan };
     if (existing) Object.assign(existing, data);
     else state.rxs.push(data);
     save(); renderAll(); close();
@@ -402,6 +485,14 @@ function rxModal(existing){
 }
 
 /* ---------- rendering ---------- */
+function fmtShare(plan, key, amt){
+  const mode = (plan.mode && plan.mode[key]) || "copay";
+  const n = num(amt);
+  if (mode === "copay") return "$" + n;
+  if (mode === "copay_ded") return "$" + n + "*";
+  if (mode === "coins") return n + "%";
+  return n + "%*";
+}
 function renderPlans(){
   const wrap = document.getElementById("planCards");
   wrap.innerHTML = "";
@@ -415,8 +506,9 @@ function renderPlans(){
       h("div", {class:"big"}, fmt(monthlyPremium(p)), h("small", null, " /mo premium")),
       h("div", {class:"kv"}, h("span", null, "Deductible"), h("b", null, fmt(num(p.deductible)))),
       h("div", {class:"kv"}, h("span", null, "OOP max"), h("b", null, fmt(num(p.oopMax)))),
-      h("div", {class:"kv"}, h("span", null, "PCP / Specialist / UC"), h("b", null, fmt(num(p.pcp))+" / "+fmt(num(p.spec))+" / "+fmt(num(p.uc)))),
+      h("div", {class:"kv"}, h("span", null, "PCP / Specialist / UC"), h("b", null, fmtShare(p,"pcp",p.pcp)+" / "+fmtShare(p,"spec",p.spec)+" / "+fmtShare(p,"uc",p.uc))),
       num(p.hsa) ? h("div", {class:"kv"}, h("span", null, "Employer HSA/HRA"), h("b", null, fmt(num(p.hsa))+"/yr")) : null,
+      Object.values(p.mode||{}).some(m=>m.indexOf("_ded")!==-1) ? h("div", {class:"kv"}, h("span", null, "* = after deductible")) : null,
       h("div", {class:"card-actions"},
         h("button", {onclick:()=>planModal(p)}, "Edit"),
         h("button", {class:"danger", onclick:()=>confirmModal("Delete plan", "Delete \""+p.name+"\"? Prescription tier settings for this plan are removed too.", ()=>{
@@ -467,6 +559,29 @@ function renderVisits(){
       onchange: (e)=>{ state.visits[key] = num(e.target.value); save(); renderResults(); }});
     wrap.appendChild(field(label, inp, hint));
   }
+  const costDefs = [
+    ["pcpCost","Full price: PCP visit ($)","What a primary care visit costs before insurance shares it — used when a plan's rule is \"after deductible\" or coinsurance. ~$150–250 is typical."],
+    ["specCost","Full price: specialist ($)","Full billed price of a specialist visit. ~$250–400 is typical."],
+    ["ucCost","Full price: urgent care ($)","Full billed price of an urgent care visit. ~$150–300 is typical."]
+  ];
+  for (const [key,label,hint] of costDefs){
+    const inp = h("input", {type:"number", min:"0", step:"1", value:state.assume[key] != null ? state.assume[key] : 0,
+      onchange: (e)=>{ state.assume[key] = num(e.target.value); save(); renderResults(); }});
+    wrap.appendChild(field(label, inp, hint));
+  }
+}
+
+function flipPoint(baseWinnerId){
+  /* scan extra billed spending to find where the cheapest plan changes */
+  for (let extra = 250; extra <= 30000; extra += 250){
+    let best = null;
+    for (const p of state.plans){
+      const yr = simulate(p, extra).totalYr;
+      if (!best || yr < best.yr) best = { id: p.id, name: p.name, yr };
+    }
+    if (best.id !== baseWinnerId) return { extra, name: best.name };
+  }
+  return null;
 }
 
 function renderResults(){
@@ -476,7 +591,7 @@ function renderResults(){
     wrap.appendChild(h("div", {class:"empty"}, "Add at least one plan to see totals — two or more to compare."));
     return;
   }
-  const rows = state.plans.map(p=>({ p, t: totals(p) }));
+  const rows = state.plans.map(p=>({ p, t: simulate(p, whatIf) }));
   rows.sort((a,b)=>a.t.totalYr - b.t.totalYr);
   const winner = rows[0], runner = rows[1];
 
@@ -491,30 +606,54 @@ function renderResults(){
     cmp("Premiums", winner.t.prem, runner.t.prem, "/mo");
     cmp("Prescriptions", winner.t.rxMo, runner.t.rxMo, "/mo");
     cmp("Office visits", winner.t.visMo, runner.t.visMo, "/mo");
+    if (whatIf > 0) cmp("Extra care", winner.t.extraMo, runner.t.extraMo, "/mo");
     const hd = winner.t.hsaMo - runner.t.hsaMo;
     if (Math.abs(hd) >= 0.005) parts.push("Employer HSA/HRA: " + winner.p.name + " gets " + fmt(Math.abs(hd)) + "/mo " + (hd > 0 ? "more" : "less") + " free money");
     wrap.appendChild(h("div", {class:"banner"},
-      h("div", {html: "<b>" + esc(winner.p.name) + "</b> comes out ahead — about <b>" + fmt(diff) + "/yr</b> (" + fmt(diff/12) + "/mo) cheaper than " + esc(runner.p.name) + " at your usage."}),
+      h("div", {html: "<b>" + esc(winner.p.name) + "</b> comes out ahead — about <b>" + fmt(diff) + "/yr</b> (" + fmt(diff/12) + "/mo) cheaper than " + esc(runner.p.name) + " at your usage" + (whatIf > 0 ? " plus " + fmt(whatIf) + " of extra billed care" : "") + "."}),
       parts.length ? h("ul", null, ...parts.map(s=>h("li", null, s))) : null
     ));
   }
 
+  const heads = ["Plan","Premium /mo","Rx /mo","Visits /mo"];
+  if (whatIf > 0) heads.push("Extra /mo");
+  heads.push("HSA /mo","Total /mo","Total /yr","Worst case /yr");
   const table = h("table", null,
-    h("thead", null, h("tr", null,
-      ...["Plan","Premium /mo","Rx /mo","Visits /mo","HSA /mo","Total /mo","Total /yr","Worst case /yr"].map(x=>h("th", null, x))
-    )),
+    h("thead", null, h("tr", null, ...heads.map(x=>h("th", null, x)))),
     h("tbody", null, ...rows.map(({p,t})=>{
       const win = runner && p.id === winner.p.id;
-      return h("tr", {class: win ? "winner" : ""},
-        h("td", null, p.name),
-        cell(t.prem), cell(t.rxMo), cell(t.visMo), cell(-t.hsaMo),
-        cell(t.totalMo, win), cell(t.totalYr, win), cell(t.worstYr)
-      );
+      const tds = [h("td", null, p.name), cell(t.prem), cell(t.rxMo), cell(t.visMo)];
+      if (whatIf > 0) tds.push(cell(t.extraMo));
+      tds.push(cell(-t.hsaMo), cell(t.totalMo, win), cell(t.totalYr, win), cell(t.worstYr));
+      return h("tr", {class: win ? "winner" : ""}, ...tds);
     }))
   );
   const tw = h("div", {class:"tablewrap"}, table);
   wrap.appendChild(tw);
   makeSortable(table);
+
+  /* what-if slider */
+  const sliderVal = h("b", null, whatIf > 0 ? fmt(whatIf) : "$0");
+  const slider = h("input", {type:"range", min:"0", max:"20000", step:"250", value:whatIf,
+    oninput: (e)=>{ whatIf = num(e.target.value); renderResults(); }});
+  const sliderWrap = h("div", {style:"margin:18px 0 4px"},
+    h("label", {class:"f"},
+      h("span", null, "What if something happens? Extra billed care this year: ", sliderVal,
+        h("span", {class:"info", title:"Drag to add unexpected medical spending (billed prices — an ER visit, imaging, a procedure). It runs through each plan's deductible, its \"coinsurance for other care\" percent, and the out-of-pocket max, so you can see whether the winner flips in a bad year."}, "ⓘ")),
+      slider
+    )
+  );
+  wrap.appendChild(sliderWrap);
+  if (runner){
+    const baseRows = state.plans.map(p=>({ id: p.id, yr: simulate(p, 0).totalYr }));
+    baseRows.sort((a,b)=>a.yr-b.yr);
+    const fp = flipPoint(baseRows[0].id);
+    wrap.appendChild(h("p", {class:"sub", style:"margin:2px 0 12px"},
+      fp ? "Tipping point: if extra billed care exceeds about " + fmt(fp.extra) + " this year, " + fp.name + " becomes the cheaper plan."
+         : "No tipping point: the same plan stays cheapest even with up to $30,000 of extra billed care."));
+  }
+
+  renderChart(wrap, rows);
 
   if (state.rxs.length){
     wrap.appendChild(h("h3", {style:"font-size:15px;margin:18px 0 6px"}, "Prescription cost per month, by plan"));
@@ -523,12 +662,24 @@ function renderResults(){
       h("tbody", null, ...state.rxs.map(rx=>h("tr", null,
         h("td", null, rx.name + " (" + num(rx.fillsPerMonth) + "/mo)"),
         ...state.plans.map(p=>{
-          const mo = num(rx.fillsPerMonth) * rxCostPerFill(rx, p);
-          return cell(mo);
+          const count = num(rx.fillsPerMonth);
+          const cfg = (rx.perPlan && rx.perPlan[p.id]) || {tier:"t1"};
+          let mo, rule;
+          if (cfg.tier === "custom"){ mo = count*num(cfg.customCost); rule = "custom amount"; }
+          else {
+            const amt = num(p.rx && p.rx[cfg.tier]);
+            const mode = p.mode[cfg.tier] || "copay";
+            rule = fmtShare(p, cfg.tier, amt) + " per fill";
+            mo = (mode === "coins" || mode === "coins_ded") ? count * amt/100 * num(rx.retail) : count * amt;
+          }
+          const td = cell(mo);
+          td.title = rule;
+          return td;
         })
       )))
     );
     wrap.appendChild(h("div", {class:"tablewrap"}, rxTable));
+    wrap.appendChild(h("p", {class:"sub", style:"margin:6px 0 0"}, "Steady-state cost once any deductible is met (hover a value for the rule). The totals above also include the pre-deductible phase."));
     makeSortable(rxTable);
   }
 
@@ -539,6 +690,98 @@ function renderResults(){
   }
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+/* ---------- cumulative cost chart ---------- */
+function renderChart(wrap, rows){
+  if (state.plans.length < 1) return;
+  const shown = rows.filter(r => state.plans.indexOf(r.p) < 6); /* color follows the entity; no cycling past 6 */
+  const colorOf = p => SERIES[state.plans.indexOf(p)];
+  wrap.appendChild(h("h3", {style:"font-size:15px;margin:22px 0 6px"}, "Cumulative cost through the plan year"));
+  if (rows.length > shown.length)
+    wrap.appendChild(h("p", {class:"sub"}, "Chart shows the first 6 plans; the table above covers all of them."));
+
+  const W = 720, H = 300, padL = 62, padR = 130, padT = 14, padB = 34;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const maxV = Math.max(...shown.map(r => r.t.cum[11]), 1);
+  const minV = Math.min(0, ...shown.map(r => r.t.cum[0]));
+  /* nice ceiling: 1/2/5 × 10^k */
+  const pow = Math.pow(10, Math.floor(Math.log10(maxV)));
+  let top = pow; for (const mlt of [1,2,2.5,5,10]) if (mlt*pow >= maxV){ top = mlt*pow; break; }
+  const x = i => padL + (i/11)*iw;
+  const y = v => padT + ih - ((v - minV)/(top - minV))*ih;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("viewBox", "0 0 "+W+" "+H);
+  svg.style.width = "100%"; svg.style.height = "auto"; svg.style.display = "block";
+  function sEl(tag, attrs, text){
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    if (text != null) el.textContent = text;
+    return el;
+  }
+  /* gridlines + y labels */
+  const ticks = 4;
+  for (let t = 0; t <= ticks; t++){
+    const v = minV + (top - minV)*t/ticks;
+    svg.appendChild(sEl("line", {x1:padL, x2:W-padR, y1:y(v), y2:y(v), stroke:"#e1e0d9", "stroke-width":1}));
+    svg.appendChild(sEl("text", {x:padL-8, y:y(v)+4, "text-anchor":"end", fill:"#898781", "font-size":"11.5",
+      style:"font-variant-numeric:tabular-nums"}, "$"+Math.round(v).toLocaleString()));
+  }
+  /* x labels */
+  for (const m of [1,3,6,9,12]){
+    svg.appendChild(sEl("text", {x:x(m-1), y:H-padB+18, "text-anchor":"middle", fill:"#898781", "font-size":"11.5"}, "M"+m));
+  }
+  svg.appendChild(sEl("text", {x:padL+iw/2, y:H-2, "text-anchor":"middle", fill:"#898781", "font-size":"11"}, "Month of plan year"));
+  svg.appendChild(sEl("line", {x1:padL, x2:W-padR, y1:y(minV), y2:y(minV), stroke:"#c3c2b7", "stroke-width":1}));
+
+  /* lines + end labels (collision-nudged, text in ink not series color) */
+  const ends = [];
+  for (const r of shown){
+    const pts = r.t.cum.map((v,i)=>x(i)+","+y(v)).join(" ");
+    svg.appendChild(sEl("polyline", {points:pts, fill:"none", stroke:colorOf(r.p), "stroke-width":2,
+      "stroke-linejoin":"round", "stroke-linecap":"round"}));
+    ends.push({ name:r.p.name, y:y(r.t.cum[11]), color:colorOf(r.p) });
+  }
+  ends.sort((a,b)=>a.y-b.y);
+  for (let i=1;i<ends.length;i++) if (ends[i].y - ends[i-1].y < 14) ends[i].y = ends[i-1].y + 14;
+  for (const e of ends){
+    svg.appendChild(sEl("circle", {cx:W-padR+8, cy:e.y-4, r:4, fill:e.color}));
+    svg.appendChild(sEl("text", {x:W-padR+16, y:e.y, fill:"#52514e", "font-size":"12"},
+      e.name.length>16 ? e.name.slice(0,15)+"…" : e.name));
+  }
+  /* crosshair */
+  const cross = sEl("line", {x1:0, x2:0, y1:padT, y2:padT+ih, stroke:"#c3c2b7", "stroke-width":1, visibility:"hidden"});
+  svg.appendChild(cross);
+
+  const legend = h("div", {style:"display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin:2px 0 6px"},
+    ...shown.map(r=>h("span", {style:"display:inline-flex;align-items:center;gap:6px"},
+      h("span", {style:"width:10px;height:10px;border-radius:2px;background:"+colorOf(r.p)}), r.p.name)));
+
+  const tip = h("div", {style:"position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);"+
+    "border-radius:8px;box-shadow:var(--shadow);padding:7px 11px;font-size:12.5px;display:none;white-space:nowrap;z-index:5"});
+  const box = h("div", {style:"position:relative"}, legend, svg, tip);
+  wrap.appendChild(box);
+
+  svg.addEventListener("mousemove", (ev)=>{
+    const rect = svg.getBoundingClientRect();
+    const sx = (ev.clientX - rect.left) * (W/rect.width);
+    let i = Math.round(((sx - padL)/iw)*11);
+    i = Math.max(0, Math.min(11, i));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
+    cross.setAttribute("visibility", "visible");
+    const items = shown.map(r=>({name:r.p.name, v:r.t.cum[i], c:colorOf(r.p)})).sort((a,b)=>a.v-b.v);
+    tip.innerHTML = "<b>Month "+(i+1)+"</b><br>" + items.map(it=>
+      "<span style='display:inline-block;width:8px;height:8px;border-radius:2px;background:"+it.c+";margin-right:5px'></span>"+
+      esc(it.name)+": <b style='font-variant-numeric:tabular-nums'>"+fmt(it.v)+"</b>").join("<br>");
+    tip.style.display = "block";
+    const bx = box.getBoundingClientRect();
+    let left = ev.clientX - bx.left + 14;
+    if (left + tip.offsetWidth > bx.width) left = ev.clientX - bx.left - tip.offsetWidth - 14;
+    tip.style.left = left + "px";
+    tip.style.top = (ev.clientY - bx.top - 10) + "px";
+  });
+  svg.addEventListener("mouseleave", ()=>{ tip.style.display = "none"; cross.setAttribute("visibility","hidden"); });
+}
 
 function renderAll(){ renderPlans(); renderRx(); renderVisits(); renderResults(); }
 
@@ -558,7 +801,7 @@ document.getElementById("importFile").addEventListener("change", (e)=>{
     try{
       const data = JSON.parse(reader.result);
       if (!Array.isArray(data.plans)) throw new Error("bad shape");
-      state = { plans: data.plans, rxs: data.rxs || [], visits: data.visits || {pcp:0,spec:0,uc:0} };
+      state = migrate({ plans: data.plans, rxs: data.rxs || [], visits: data.visits || {pcp:0,spec:0,uc:0}, assume: data.assume });
       save(); renderAll(); toast("Data imported");
     }catch(err){ toast("That file doesn't look like a Copay export"); }
     e.target.value = "";
