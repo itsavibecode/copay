@@ -11,7 +11,7 @@ prescription still cheaper after its $20-higher premium?
 
 Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo=1`
 
-## Features (v0.2)
+## Features (v0.3)
 
 - Compare any number of plans: premium (monthly or per-paycheck), deductible,
   out-of-pocket max, employer HSA/HRA contribution, PCP/specialist/urgent-care
@@ -34,6 +34,9 @@ Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo
 - Sortable comparison table, plus a per-prescription cost table by plan
 - Worst-case-year column: premiums + out-of-pocket max − employer HSA money
 - All data stays in your browser (localStorage). Export/Import JSON for backup
+- **Print / PDF** button — a clean, print-formatted report of the whole
+  comparison (plans, usage, winner, tables, chart) via the browser's print
+  dialog; choose "Save as PDF" there to get a shareable file
 - Demo mode (`?demo=1`) with a PPO-vs-HDHP sample — changes aren't saved
 
 ## Model notes
@@ -50,6 +53,15 @@ No accounts, no server, no analytics. Health and cost data never leaves your
 browser unless you export it yourself.
 
 ## Changelog
+
+### v0.3.0 — 2026-07-07
+
+Print / PDF export. The JSON export is for backing up your data; this is for
+sharing the *answer* — a clean report of the comparison you can save as a PDF
+from the browser's print dialog or hand to a spouse/HR. Buttons, sliders, and
+tooltips drop out of the printed page; a header line records the date and any
+what-if assumption so the numbers can't be misread later. Features header
+bumped to v0.2→v0.3 accordingly.
 
 ### v0.2.0 — 2026-07-07
 

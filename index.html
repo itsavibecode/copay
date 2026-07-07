@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="app-version" content="0.2.0">
+<meta name="app-version" content="0.3.0">
 <meta name="description" content="Compare the real monthly and annual cost of health insurance plans: premiums, prescriptions, and office visits side by side.">
 <title>Copay — health plan cost estimator</title>
 <style>
@@ -81,6 +81,18 @@ legend{font-size:13px;color:var(--muted);padding:0 4px}
 footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:30px}
 footer a{color:var(--accent)}
 @media(max-width:560px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.print-header{display:none}
+@media print{
+  body{background:#fff;font-size:13px}
+  .toolbar,.demo-banner,button,input[type=range],.info,.no-print,footer,#toasts,.overlay{display:none !important}
+  .wrap{max-width:none;padding:0}
+  section{box-shadow:none;border-color:#bbb;padding:12px 16px;margin-bottom:12px}
+  .print-header{display:block;margin:0 0 4px;color:var(--muted);font-size:12px}
+  .plan-card,.rx-row,.banner,.tablewrap,.chartbox{break-inside:avoid;page-break-inside:avoid}
+  .banner,tr.winner td,td.win{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .tablewrap{overflow:visible}
+  a{color:inherit;text-decoration:none}
+}
 </style>
 </head>
 <body>
@@ -89,11 +101,13 @@ footer a{color:var(--accent)}
     <h1>Copay</h1>
     <span class="ver" id="verBadge"></span>
     <div class="toolbar">
-      <button id="exportBtn">Export</button>
-      <button id="importBtn">Import</button>
+      <button id="pdfBtn" title="Open the print dialog — choose 'Save as PDF' to export the comparison as a shareable document">Print / PDF</button>
+      <button id="exportBtn" title="Download your data as a JSON file for backup or moving to another device">Export</button>
+      <button id="importBtn" title="Load a previously exported JSON file">Import</button>
       <input type="file" id="importFile" accept="application/json" hidden>
     </div>
   </header>
+  <div class="print-header" id="printHeader"></div>
   <p class="tagline">Which health plan actually costs less? Enter your plan options and what you really use — see the true monthly and annual cost side by side.</p>
 
   <div class="demo-banner" id="demoBanner" hidden>Demo data — changes are not saved. Remove <b>?demo=1</b> from the address to use your own data.</div>
@@ -128,7 +142,7 @@ footer a{color:var(--accent)}
 
 <script>
 "use strict";
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "0.3.0";
 const LS_KEY = "copay_v1";
 const TIERS = [
   ["t1","Tier 1 — Generic"],
@@ -636,7 +650,7 @@ function renderResults(){
   const sliderVal = h("b", null, whatIf > 0 ? fmt(whatIf) : "$0");
   const slider = h("input", {type:"range", min:"0", max:"20000", step:"250", value:whatIf,
     oninput: (e)=>{ whatIf = num(e.target.value); renderResults(); }});
-  const sliderWrap = h("div", {style:"margin:18px 0 4px"},
+  const sliderWrap = h("div", {class: whatIf > 0 ? "" : "no-print", style:"margin:18px 0 4px"},
     h("label", {class:"f"},
       h("span", null, "What if something happens? Extra billed care this year: ", sliderVal,
         h("span", {class:"info", title:"Drag to add unexpected medical spending (billed prices — an ER visit, imaging, a procedure). It runs through each plan's deductible, its \"coinsurance for other care\" percent, and the out-of-pocket max, so you can see whether the winner flips in a bad year."}, "ⓘ")),
@@ -759,7 +773,7 @@ function renderChart(wrap, rows){
 
   const tip = h("div", {style:"position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);"+
     "border-radius:8px;box-shadow:var(--shadow);padding:7px 11px;font-size:12.5px;display:none;white-space:nowrap;z-index:5"});
-  const box = h("div", {style:"position:relative"}, legend, svg, tip);
+  const box = h("div", {class:"chartbox", style:"position:relative"}, legend, svg, tip);
   wrap.appendChild(box);
 
   svg.addEventListener("mousemove", (ev)=>{
@@ -786,6 +800,14 @@ function renderChart(wrap, rows){
 function renderAll(){ renderPlans(); renderRx(); renderVisits(); renderResults(); }
 
 /* ---------- export / import ---------- */
+document.getElementById("pdfBtn").addEventListener("click", ()=>{ fillPrintHeader(); window.print(); });
+function fillPrintHeader(){
+  document.getElementById("printHeader").textContent =
+    "Copay v" + APP_VERSION + " — health plan comparison, generated " + new Date().toLocaleDateString() +
+    (whatIf > 0 ? " — includes " + fmt(whatIf) + " of what-if extra billed care" : "") +
+    " — itsavibecode.github.io/copay";
+}
+window.addEventListener("beforeprint", fillPrintHeader);
 document.getElementById("exportBtn").addEventListener("click", ()=>{
   const blob = new Blob([JSON.stringify(Object.assign({version:APP_VERSION}, state), null, 2)], {type:"application/json"});
   const a = h("a", {href:URL.createObjectURL(blob), download:"copay-data.json"});
