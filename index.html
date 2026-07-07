@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="app-version" content="0.3.0">
+<meta name="app-version" content="0.4.0">
 <meta name="description" content="Compare the real monthly and annual cost of health insurance plans: premiums, prescriptions, and office visits side by side.">
 <title>Copay — health plan cost estimator</title>
 <style>
@@ -142,7 +142,7 @@ footer a{color:var(--accent)}
 
 <script>
 "use strict";
-const APP_VERSION = "0.3.0";
+const APP_VERSION = "0.4.0";
 const LS_KEY = "copay_v1";
 const TIERS = [
   ["t1","Tier 1 — Generic"],
@@ -180,8 +180,16 @@ function migrate(st){
     p.mode = mode;
     if (p.coins == null) p.coins = 20;
   }
+  for (const rx of st.rxs || []){
+    if (rx.fills == null){ rx.fills = num(rx.fillsPerMonth); rx.per = "month"; }
+    if (rx.per !== "year") rx.per = "month";
+    delete rx.fillsPerMonth;
+  }
   return st;
 }
+/* fills per month, whichever way the user entered it */
+function fillsMo(rx){ return rx.per === "year" ? num(rx.fills)/12 : num(rx.fills); }
+function fillsLabel(rx){ return num(rx.fills) + "/" + (rx.per === "year" ? "yr" : "mo"); }
 
 function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+"-"+Math.random().toString(36).slice(2)); }
 function fmt(n){ return (n<0?"-":"") + "$" + Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -213,9 +221,9 @@ function demoData(){
         mode:{pcp:"coins_ded",spec:"coins_ded",uc:"coins_ded",t1:"copay_ded",t2:"copay_ded",t3:"copay_ded",t4:"coins_ded"} }
     ],
     rxs: [
-      { id:uid(), name:"Atorvastatin 20 mg", fillsPerMonth:1, retail:25, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t1"} } },
-      { id:uid(), name:"Eliquis 5 mg", fillsPerMonth:1, retail:550, perPlan:{ [a]:{tier:"t2"}, [b]:{tier:"t3"} } },
-      { id:uid(), name:"Albuterol inhaler", fillsPerMonth:0.5, retail:90, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t2"} } }
+      { id:uid(), name:"Atorvastatin 20 mg", fills:1, per:"month", retail:25, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t1"} } },
+      { id:uid(), name:"Eliquis 5 mg", fills:1, per:"month", retail:550, perPlan:{ [a]:{tier:"t2"}, [b]:{tier:"t3"} } },
+      { id:uid(), name:"Albuterol inhaler", fills:6, per:"year", retail:90, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t2"} } }
     ],
     visits: { pcp:3, spec:2, uc:1 },
     assume: { pcpCost:180, specCost:300, ucCost:200 }
@@ -304,7 +312,7 @@ function simulate(plan, extraAnnual){
   for (let m = 0; m < 12; m++){
     let mo = 0;
     for (const rx of state.rxs){
-      const count = num(rx.fillsPerMonth);
+      const count = fillsMo(rx);
       if (!count) continue;
       const cfg = (rx.perPlan && rx.perPlan[plan.id]) || { tier:"t1" };
       let paid;
@@ -448,9 +456,12 @@ function planModal(existing){
 
 /* ---------- prescription modal ---------- */
 function rxModal(existing){
-  const r = existing || { name:"", fillsPerMonth:1, retail:"", perPlan:{} };
+  const r = existing || { name:"", fills:1, per:"month", retail:"", perPlan:{} };
   const inName = h("input", {value:r.name, placeholder:"e.g. Atorvastatin 20 mg"});
-  const inFills = h("input", {type:"number", min:"0", step:"0.1", value:r.fillsPerMonth});
+  const inFills = h("input", {type:"number", min:"0", step:"0.1", value:r.fills});
+  const inPer = h("select", null, ...[["month","per month"],["year","per year"]].map(([v,l])=>{
+    const o = h("option", {value:v}, l); if (v===r.per) o.selected = true; return o;
+  }));
   const inRetail = h("input", {type:"number", min:"0", step:"0.01", value:r.retail!=null?r.retail:""});
   const perPlanEls = {};
   const planBlocks = state.plans.map(p=>{
@@ -473,7 +484,10 @@ function rxModal(existing){
   const body = h("div", null,
     h("div", {class:"grid2", style:"margin-bottom:12px"},
       field("Name", inName, null),
-      field("Fills per month", inFills, "1 = monthly refill. A 90-day supply refilled quarterly = 0.33. An as-needed inhaler every other month = 0.5."),
+      h("div", {class:"grid2"},
+        field("Fills", inFills, "How many fills in the chosen period. A monthly refill = 1 per month; an as-needed inhaler = maybe 2 or 3 per year; a 90-day supply = 4 per year."),
+        field("Every", inPer, "Pick per year for occasional prescriptions so you don't have to do fraction math. Costs are spread evenly across the year either way.")
+      ),
       field("Retail price per fill ($)", inRetail, "The full cash/negotiated price of one fill — what you'd pay before the deductible is met. Needed for \"after deductible\" and coinsurance rules; GoodRx or your pharmacy receipt is a good source. Leave blank on pure-copay plans."),
       null
     ),
@@ -490,7 +504,7 @@ function rxModal(existing){
     for (const pid in perPlanEls){
       perPlan[pid] = { tier: perPlanEls[pid].sel.value, customCost: num(perPlanEls[pid].custom.value) };
     }
-    const data = { id: existing ? existing.id : uid(), name, fillsPerMonth: num(inFills.value), retail: num(inRetail.value), perPlan };
+    const data = { id: existing ? existing.id : uid(), name, fills: num(inFills.value), per: inPer.value, retail: num(inRetail.value), perPlan };
     if (existing) Object.assign(existing, data);
     else state.rxs.push(data);
     save(); renderAll(); close();
@@ -549,7 +563,7 @@ function renderRx(){
     }).join(" · ");
     wrap.appendChild(h("div", {class:"rx-row"},
       h("span", {class:"name"}, rx.name),
-      h("span", {class:"meta"}, num(rx.fillsPerMonth) + " fill" + (num(rx.fillsPerMonth)===1?"":"s") + "/mo" + (tierBits ? " · " + tierBits : "")),
+      h("span", {class:"meta"}, num(rx.fills) + " fill" + (num(rx.fills)===1?"":"s") + (rx.per==="year"?"/yr":"/mo") + (tierBits ? " · " + tierBits : "")),
       h("span", {class:"spacer"}),
       h("button", {class:"link", onclick:()=>rxModal(rx)}, "Edit"),
       h("button", {class:"link", style:"color:var(--danger)", onclick:()=>confirmModal("Delete prescription", "Delete \""+rx.name+"\"?", ()=>{
@@ -674,9 +688,9 @@ function renderResults(){
     const rxTable = h("table", null,
       h("thead", null, h("tr", null, h("th", null, "Prescription"), ...state.plans.map(p=>h("th", null, p.name)))),
       h("tbody", null, ...state.rxs.map(rx=>h("tr", null,
-        h("td", null, rx.name + " (" + num(rx.fillsPerMonth) + "/mo)"),
+        h("td", null, rx.name + " (" + fillsLabel(rx) + ")"),
         ...state.plans.map(p=>{
-          const count = num(rx.fillsPerMonth);
+          const count = fillsMo(rx);
           const cfg = (rx.perPlan && rx.perPlan[p.id]) || {tier:"t1"};
           let mo, rule;
           if (cfg.tier === "custom"){ mo = count*num(cfg.customCost); rule = "custom amount"; }

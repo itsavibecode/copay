@@ -11,7 +11,7 @@ prescription still cheaper after its $20-higher premium?
 
 Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo=1`
 
-## Features (v0.3)
+## Features (v0.4)
 
 - Compare any number of plans: premium (monthly or per-paycheck), deductible,
   out-of-pocket max, employer HSA/HRA contribution, PCP/specialist/urgent-care
@@ -29,7 +29,8 @@ Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo
   dollar amount where it does
 - Prescriptions with per-plan tier assignment (the same drug is often a
   different tier under different insurers), an optional retail price per fill
-  (used by deductible/coinsurance rules), or an exact custom cost
+  (used by deductible/coinsurance rules), or an exact custom cost; fill
+  frequency entered per month or per year, whichever is natural
 - Winner banner explaining the annual savings and where they come from
 - Sortable comparison table, plus a per-prescription cost table by plan
 - Worst-case-year column: premiums + out-of-pocket max − employer HSA money
@@ -53,6 +54,15 @@ No accounts, no server, no analytics. Health and cost data never leaves your
 browser unless you export it yourself.
 
 ## Changelog
+
+### v0.4.0 — 2026-07-07
+
+Prescriptions can now be entered as fills **per year**, not just per month.
+An inhaler you refill twice a year was previously "0.17 fills per month" —
+fraction math nobody should have to do. Pick "per year" in the prescription
+form and enter the real count; costs are spread evenly across the year either
+way. Existing prescriptions keep working unchanged (they carry over as
+per-month).
 
 ### v0.3.0 — 2026-07-07
 
