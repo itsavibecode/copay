@@ -11,7 +11,7 @@ prescription still cheaper after its $20-higher premium?
 
 Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo=1`
 
-## Features (v0.4)
+## Features (v0.5)
 
 - Compare any number of plans: premium (monthly or per-paycheck), deductible,
   out-of-pocket max, employer HSA/HRA contribution, PCP/specialist/urgent-care
@@ -34,7 +34,13 @@ Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo
 - Winner banner explaining the annual savings and where they come from
 - Sortable comparison table, plus a per-prescription cost table by plan
 - Worst-case-year column: premiums + out-of-pocket max − employer HSA money
-- All data stays in your browser (localStorage). Export/Import JSON for backup
+- **History tab** — two ledgers: *saved comparisons* (timestamped snapshots of
+  a whole comparison, with an optional "compared with agent" note, loadable
+  back into the Compare tab) and *plan years* (what a year you actually lived
+  through really cost: premiums paid, medical, prescriptions, deductible used —
+  side by side with what the estimate predicted, with the delta called out)
+- All data stays in your browser (localStorage). Export/Import JSON for backup;
+  a history-only JSON file merges into existing data instead of replacing it
 - **Print / PDF** button — a clean, print-formatted report of the whole
   comparison (plans, usage, winner, tables, chart) via the browser's print
   dialog; choose "Save as PDF" there to get a shareable file
@@ -54,6 +60,17 @@ No accounts, no server, no analytics. Health and cost data never leaves your
 browser unless you export it yourself.
 
 ## Changelog
+
+### v0.5.0 — 2026-07-07
+
+The accountability update: a History tab that closes the loop between
+"what we predicted" and "what it actually cost." Save a comparison as a
+timestamped snapshot (recording whether an agent walked you through it), then
+after living with the chosen plan, log the year's real numbers — premiums
+paid, medical and pharmacy spending, deductible used — and see the delta
+against the prediction. Snapshots can be loaded back into the Compare tab to
+re-examine old decisions. Import now merges history-only JSON files, so past
+years kept in a spreadsheet can be brought in without touching current plans.
 
 ### v0.4.0 — 2026-07-07
 
