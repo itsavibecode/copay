@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="app-version" content="0.1.0">
+<meta name="description" content="Compare the real monthly and annual cost of health insurance plans: premiums, prescriptions, and office visits side by side.">
+<title>Copay — health plan cost estimator</title>
+<style>
+:root{
+  --bg:#f4f6f8; --card:#ffffff; --ink:#1a2430; --muted:#5c6b7a; --line:#dfe5eb;
+  --accent:#0f766e; --accent-soft:#e6f2f0; --win:#15803d; --win-soft:#e9f7ee;
+  --danger:#b91c1c; --shadow:0 1px 3px rgba(16,32,48,.08),0 4px 14px rgba(16,32,48,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1060px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin:6px 0 4px}
+header h1{font-size:26px;margin:0;letter-spacing:-.3px}
+.ver{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:20px;padding:1px 9px}
+.tagline{color:var(--muted);margin:0 0 18px}
+.toolbar{margin-left:auto;display:flex;gap:8px}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:18px}
+section>h2{margin:0 0 4px;font-size:17px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{filter:brightness(1.08);color:#fff}
+button.danger{color:var(--danger)}
+button.danger:hover{border-color:var(--danger)}
+button.link{border:none;background:none;padding:2px 6px;color:var(--accent);text-decoration:underline}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.plan-card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.plan-card h3{margin:0;font-size:16px}
+.plan-card .big{font-size:22px;font-weight:600}
+.plan-card .big small{font-size:12px;font-weight:400;color:var(--muted)}
+.kv{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.kv b{color:var(--ink);font-weight:500}
+.card-actions{margin-top:8px;display:flex;gap:8px}
+.card-actions button{padding:4px 10px;font-size:13px}
+.empty{color:var(--muted);font-size:14px;border:1px dashed var(--line);border-radius:10px;padding:18px;text-align:center}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{cursor:pointer;user-select:none;color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.4px}
+thead th:hover{color:var(--accent)}
+thead th .caret{display:inline-block;width:12px;color:var(--accent)}
+tr.winner td{background:var(--win-soft)}
+td.win{color:var(--win);font-weight:600}
+.tablewrap{overflow-x:auto}
+.banner{background:var(--win-soft);border:1px solid #bfe6cc;border-radius:10px;padding:12px 16px;margin-bottom:14px}
+.banner b{color:var(--win)}
+.banner ul{margin:6px 0 0;padding-left:20px;color:var(--muted);font-size:13.5px}
+.usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px}
+.rx-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+.rx-row .name{font-weight:600}
+.rx-row .meta{color:var(--muted);font-size:13px}
+.rx-row .spacer{flex:1}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+label.f>span{display:flex;align-items:center;gap:4px}
+input,select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);width:100%;min-width:0}
+input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.info{cursor:help;color:var(--accent);font-size:12px;border:1px solid var(--accent);border-radius:50%;width:15px;height:15px;line-height:13px;display:inline-block;text-align:center;flex:none}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+fieldset{border:1px solid var(--line);border-radius:10px;margin:0 0 12px;padding:10px 14px 14px;min-width:0}
+legend{font-size:13px;color:var(--muted);padding:0 4px}
+.overlay{position:fixed;inset:0;background:rgba(16,28,40,.45);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow-y:auto;z-index:50}
+.modal{background:var(--card);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.25);width:100%;max-width:560px;padding:18px 20px;overflow-x:hidden}
+.modal-head{display:flex;align-items:center;margin-bottom:12px}
+.modal-head h3{margin:0;font-size:17px;flex:1}
+.modal-head .x{border:none;background:none;font-size:18px;color:var(--muted);padding:2px 8px}
+.modal-head .x:hover{color:var(--ink)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+#toasts{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:100;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{background:#1f2c3a;color:#fff;border-radius:8px;padding:9px 18px;font-size:14px;box-shadow:var(--shadow);animation:pop .18s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.demo-banner{background:#fff7e6;border:1px solid #f0d9a8;color:#7a5b12;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:14px}
+footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:30px}
+footer a{color:var(--accent)}
+@media(max-width:560px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Copay</h1>
+    <span class="ver" id="verBadge"></span>
+    <div class="toolbar">
+      <button id="exportBtn">Export</button>
+      <button id="importBtn">Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+  </header>
+  <p class="tagline">Which health plan actually costs less? Enter your plan options and what you really use — see the true monthly and annual cost side by side.</p>
+
+  <div class="demo-banner" id="demoBanner" hidden>Demo data — changes are not saved. Remove <b>?demo=1</b> from the address to use your own data.</div>
+
+  <section>
+    <h2>Your plans</h2>
+    <p class="sub">Everything here is on your plan's Summary of Benefits and Coverage (SBC) sheet. v0.1 compares copay amounts directly; deductible timing simulation comes in v0.2.</p>
+    <div class="cards" id="planCards"></div>
+    <div style="margin-top:12px"><button class="primary" id="addPlanBtn">Add plan</button></div>
+  </section>
+
+  <section>
+    <h2>Your usage</h2>
+    <p class="sub">Applies to every plan. Prescriptions can sit in different tiers under different plans — set the tier per plan when adding one.</p>
+    <div id="rxList"></div>
+    <button id="addRxBtn">Add prescription</button>
+    <div class="usage-grid" id="visitInputs"></div>
+  </section>
+
+  <section id="resultsSection">
+    <h2>Results</h2>
+    <p class="sub">Click any column header to sort. Worst-case year = premiums + out-of-pocket max − HSA/HRA money.</p>
+    <div id="results"></div>
+  </section>
+
+  <footer>
+    Your data never leaves this browser — stored locally, export it any time. ·
+    <span id="verFoot"></span> · <a href="https://github.com/itsavibecode/copay">GitHub</a>
+  </footer>
+</div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+const APP_VERSION = "0.1.0";
+const LS_KEY = "copay_v1";
+const TIERS = [
+  ["t1","Tier 1 — Generic"],
+  ["t2","Tier 2 — Preferred brand"],
+  ["t3","Tier 3 — Non-preferred brand"],
+  ["t4","Tier 4 — Specialty"],
+  ["custom","Custom amount"]
+];
+const PREMIUM_PERIODS = [
+  ["monthly","per month",1],
+  ["biweekly","per paycheck (every 2 weeks, 26/yr)",26/12],
+  ["semimonthly","per paycheck (twice a month, 24/yr)",2]
+];
+
+const DEMO = window.location.search.indexOf("demo=1") !== -1;
+
+let state = { plans: [], rxs: [], visits: { pcp: 3, spec: 0, uc: 1 } };
+
+function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+"-"+Math.random().toString(36).slice(2)); }
+function fmt(n){ return (n<0?"-":"") + "$" + Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function num(v){ const n = parseFloat(v); return isFinite(n) ? n : 0; }
+
+function load(){
+  if (DEMO){ state = demoData(); return; }
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) state = Object.assign({plans:[],rxs:[],visits:{pcp:0,spec:0,uc:0}}, JSON.parse(raw));
+  }catch(e){ console.error("load failed", e); }
+}
+function save(){
+  if (DEMO) return;
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  catch(e){ toast("Could not save — storage unavailable"); }
+}
+
+function demoData(){
+  const a = uid(), b = uid();
+  return {
+    plans: [
+      { id:a, name:"Acme PPO 500", premium:235, period:"monthly", deductible:500, oopMax:4500, hsa:0,
+        pcp:25, spec:50, uc:60, rx:{t1:10,t2:35,t3:65,t4:150} },
+      { id:b, name:"Acme HDHP Saver", premium:152, period:"monthly", deductible:3200, oopMax:6000, hsa:750,
+        pcp:60, spec:120, uc:95, rx:{t1:15,t2:55,t3:95,t4:200} }
+    ],
+    rxs: [
+      { id:uid(), name:"Atorvastatin 20 mg", fillsPerMonth:1, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t1"} } },
+      { id:uid(), name:"Eliquis 5 mg", fillsPerMonth:1, perPlan:{ [a]:{tier:"t2"}, [b]:{tier:"t3"} } },
+      { id:uid(), name:"Albuterol inhaler", fillsPerMonth:0.5, perPlan:{ [a]:{tier:"t1"}, [b]:{tier:"t2"} } }
+    ],
+    visits: { pcp:3, spec:2, uc:1 }
+  };
+}
+
+/* ---------- tiny DOM helpers ---------- */
+function h(tag, attrs, ...kids){
+  const el = document.createElement(tag);
+  if (attrs) for (const k in attrs){
+    if (k === "class") el.className = attrs[k];
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), attrs[k]);
+    else if (k === "html") el.innerHTML = attrs[k];
+    else el.setAttribute(k, attrs[k]);
+  }
+  for (const kid of kids){
+    if (kid == null) continue;
+    el.appendChild(typeof kid === "string" ? document.createTextNode(kid) : kid);
+  }
+  return el;
+}
+function field(label, node, hint){
+  const span = h("span", null, label);
+  if (hint) span.appendChild(h("span", {class:"info", title:hint}, "ⓘ"));
+  return h("label", {class:"f"}, span, node);
+}
+
+/* ---------- toasts & modals ---------- */
+function toast(msg){
+  const t = h("div", {class:"toast"}, msg);
+  document.getElementById("toasts").appendChild(t);
+  setTimeout(()=>{ t.style.opacity = "0"; t.style.transition = "opacity .3s"; setTimeout(()=>t.remove(), 320); }, 2600);
+}
+function openModal(title, body, actions){
+  const x = h("button", {class:"x", title:"Close", onclick: close}, "✕");
+  const overlay = h("div", {class:"overlay"},
+    h("div", {class:"modal"},
+      h("div", {class:"modal-head"}, h("h3", null, title), x),
+      body,
+      actions ? h("div", {class:"modal-actions"}, ...actions) : null
+    )
+  );
+  function close(){ overlay.remove(); }
+  document.body.appendChild(overlay);
+  return close;
+}
+function confirmModal(title, msg, onYes){
+  const close = openModal(title, h("p", null, msg), [
+    h("button", {onclick:()=>close()}, "Cancel"),
+    h("button", {class:"danger", onclick:()=>{ close(); onYes(); }}, "Delete")
+  ]);
+}
+
+/* ---------- math ---------- */
+function monthlyPremium(p){
+  const per = PREMIUM_PERIODS.find(x=>x[0]===p.period) || PREMIUM_PERIODS[0];
+  return num(p.premium) * per[2];
+}
+function rxCostPerFill(rx, plan){
+  const cfg = (rx.perPlan && rx.perPlan[plan.id]) || { tier:"t1" };
+  if (cfg.tier === "custom") return num(cfg.customCost);
+  return num(plan.rx && plan.rx[cfg.tier]);
+}
+function totals(plan){
+  const prem = monthlyPremium(plan);
+  let rxMo = 0;
+  for (const rx of state.rxs) rxMo += num(rx.fillsPerMonth) * rxCostPerFill(rx, plan);
+  const v = state.visits;
+  const visMo = (num(v.pcp)*num(plan.pcp) + num(v.spec)*num(plan.spec) + num(v.uc)*num(plan.uc)) / 12;
+  const hsaMo = num(plan.hsa) / 12;
+  const totalMo = prem + rxMo + visMo - hsaMo;
+  return {
+    prem, rxMo, visMo, hsaMo, totalMo,
+    totalYr: totalMo * 12,
+    worstYr: prem*12 + num(plan.oopMax) - num(plan.hsa)
+  };
+}
+
+/* ---------- sortable tables ---------- */
+function makeSortable(table){
+  const ths = table.querySelectorAll("thead th");
+  ths.forEach((th, idx)=>{
+    th.appendChild(h("span", {class:"caret"}, ""));
+    th.addEventListener("click", ()=>{
+      const asc = th.dataset.dir !== "asc";
+      ths.forEach(o=>{ o.dataset.dir=""; o.querySelector(".caret").textContent=""; });
+      th.dataset.dir = asc ? "asc" : "desc";
+      th.querySelector(".caret").textContent = asc ? "▲" : "▼";
+      const tbody = table.querySelector("tbody");
+      const rows = Array.from(tbody.rows);
+      rows.sort((r1,r2)=>{
+        const c1 = r1.cells[idx], c2 = r2.cells[idx];
+        const v1 = c1.dataset.sort !== undefined ? parseFloat(c1.dataset.sort) : c1.textContent.trim().toLowerCase();
+        const v2 = c2.dataset.sort !== undefined ? parseFloat(c2.dataset.sort) : c2.textContent.trim().toLowerCase();
+        if (v1 < v2) return asc ? -1 : 1;
+        if (v1 > v2) return asc ? 1 : -1;
+        return 0;
+      });
+      rows.forEach(r=>tbody.appendChild(r));
+    });
+  });
+}
+
+/* ---------- plan modal ---------- */
+function planModal(existing){
+  const p = existing || { name:"", premium:"", period:"monthly", deductible:"", oopMax:"", hsa:"",
+                          pcp:"", spec:"", uc:"", rx:{t1:"",t2:"",t3:"",t4:""} };
+  const inName = h("input", {value:p.name, placeholder:"e.g. BCBS PPO 500"});
+  const inPrem = h("input", {type:"number", min:"0", step:"0.01", value:p.premium});
+  const inPeriod = h("select", null, ...PREMIUM_PERIODS.map(([v,l])=>{
+    const o = h("option", {value:v}, l); if (v===p.period) o.selected = true; return o;
+  }));
+  const inDed = h("input", {type:"number", min:"0", step:"1", value:p.deductible});
+  const inOop = h("input", {type:"number", min:"0", step:"1", value:p.oopMax});
+  const inHsa = h("input", {type:"number", min:"0", step:"1", value:p.hsa});
+  const inPcp = h("input", {type:"number", min:"0", step:"0.01", value:p.pcp});
+  const inSpec = h("input", {type:"number", min:"0", step:"0.01", value:p.spec});
+  const inUc = h("input", {type:"number", min:"0", step:"0.01", value:p.uc});
+  const rxIn = {};
+  for (const t of ["t1","t2","t3","t4"]) rxIn[t] = h("input", {type:"number", min:"0", step:"0.01", value:(p.rx&&p.rx[t])!=null?p.rx[t]:""});
+
+  const body = h("div", null,
+    h("div", {class:"grid2", style:"margin-bottom:12px"},
+      field("Plan name", inName, "Any label that helps you tell the plans apart."),
+      null
+    ),
+    h("fieldset", null, h("legend", null, "Premium"),
+      h("div", {class:"grid2"},
+        field("Amount", inPrem, "What you pay for coverage, before any care. On a pay stub this is the medical deduction."),
+        field("Billed", inPeriod, "Employer plans are usually quoted per paycheck. Pick how yours is quoted and the math converts it to monthly.")
+      )
+    ),
+    h("fieldset", null, h("legend", null, "Plan limits"),
+      h("div", {class:"grid3"},
+        field("Deductible ($)", inDed, "What you pay out of pocket before the plan starts sharing costs. Used for the worst-case column in v0.1; full simulation comes in v0.2."),
+        field("Out-of-pocket max ($)", inOop, "The most you can pay for covered care in a year, not counting premiums. Caps your worst case."),
+        field("HSA/HRA from employer ($/yr)", inHsa, "Free money your employer puts in a health account each year. It directly offsets your costs — common with high-deductible plans.")
+      )
+    ),
+    h("fieldset", null, h("legend", null, "Office visits — what you pay per visit"),
+      h("div", {class:"grid3"},
+        field("Primary care ($)", inPcp, "Copay for a regular doctor visit. If the plan makes you pay full price until the deductible, enter your best estimate of the real visit cost."),
+        field("Specialist ($)", inSpec, "Copay for a specialist visit (dermatologist, cardiologist, etc.)."),
+        field("Urgent care ($)", inUc, "Copay for an urgent care visit.")
+      )
+    ),
+    h("fieldset", null, h("legend", null, "Prescriptions — what you pay per 30-day fill"),
+      h("div", {class:"grid2"},
+        field("Tier 1 — Generic ($)", rxIn.t1, "Cheapest tier: generic drugs."),
+        field("Tier 2 — Preferred brand ($)", rxIn.t2, "Brand-name drugs the plan favors."),
+        field("Tier 3 — Non-preferred ($)", rxIn.t3, "Brand-name drugs the plan does not favor."),
+        field("Tier 4 — Specialty ($)", rxIn.t4, "High-cost specialty drugs; often a percentage — enter the dollar amount you expect to pay.")
+      )
+    )
+  );
+  const close = openModal(existing ? "Edit plan" : "Add plan", body, [
+    h("button", {onclick:()=>close()}, "Cancel"),
+    h("button", {class:"primary", onclick:saveIt}, existing ? "Save" : "Add plan")
+  ]);
+  function saveIt(){
+    const name = inName.value.trim();
+    if (!name){ toast("Give the plan a name"); return; }
+    const data = {
+      id: existing ? existing.id : uid(),
+      name, premium: num(inPrem.value), period: inPeriod.value,
+      deductible: num(inDed.value), oopMax: num(inOop.value), hsa: num(inHsa.value),
+      pcp: num(inPcp.value), spec: num(inSpec.value), uc: num(inUc.value),
+      rx: { t1:num(rxIn.t1.value), t2:num(rxIn.t2.value), t3:num(rxIn.t3.value), t4:num(rxIn.t4.value) }
+    };
+    if (existing) Object.assign(existing, data);
+    else state.plans.push(data);
+    save(); renderAll(); close();
+    toast(existing ? "Plan updated" : "Plan added");
+  }
+}
+
+/* ---------- prescription modal ---------- */
+function rxModal(existing){
+  const r = existing || { name:"", fillsPerMonth:1, perPlan:{} };
+  const inName = h("input", {value:r.name, placeholder:"e.g. Atorvastatin 20 mg"});
+  const inFills = h("input", {type:"number", min:"0", step:"0.1", value:r.fillsPerMonth});
+  const perPlanEls = {};
+  const planBlocks = state.plans.map(p=>{
+    const cfg = (r.perPlan && r.perPlan[p.id]) || { tier:"t1", customCost:"" };
+    const sel = h("select", null, ...TIERS.map(([v,l])=>{
+      const o = h("option", {value:v}, l); if (v===cfg.tier) o.selected = true; return o;
+    }));
+    const custom = h("input", {type:"number", min:"0", step:"0.01", value:cfg.customCost!=null?cfg.customCost:"", placeholder:"$ per fill"});
+    const customWrap = field("Custom cost per fill ($)", custom, "Exact amount you pay per fill under this plan — use when tiers don't apply or you know the real number.");
+    customWrap.style.display = cfg.tier === "custom" ? "" : "none";
+    sel.addEventListener("change", ()=>{ customWrap.style.display = sel.value === "custom" ? "" : "none"; });
+    perPlanEls[p.id] = { sel, custom };
+    return h("fieldset", null, h("legend", null, p.name),
+      h("div", {class:"grid2"},
+        field("Tier under this plan", sel, "The same drug can be a different tier under different insurers. Check each plan's drug list (formulary)."),
+        customWrap
+      )
+    );
+  });
+  const body = h("div", null,
+    h("div", {class:"grid2", style:"margin-bottom:12px"},
+      field("Name", inName, null),
+      field("Fills per month", inFills, "1 = monthly refill. A 90-day supply refilled quarterly = 0.33. An as-needed inhaler every other month = 0.5.")
+    ),
+    ...(planBlocks.length ? planBlocks : [h("p", {class:"sub"}, "Add a plan first to set per-plan tiers — this prescription will default to Tier 1 on plans added later.")])
+  );
+  const close = openModal(existing ? "Edit prescription" : "Add prescription", body, [
+    h("button", {onclick:()=>close()}, "Cancel"),
+    h("button", {class:"primary", onclick:saveIt}, existing ? "Save" : "Add prescription")
+  ]);
+  function saveIt(){
+    const name = inName.value.trim();
+    if (!name){ toast("Give the prescription a name"); return; }
+    const perPlan = {};
+    for (const pid in perPlanEls){
+      perPlan[pid] = { tier: perPlanEls[pid].sel.value, customCost: num(perPlanEls[pid].custom.value) };
+    }
+    const data = { id: existing ? existing.id : uid(), name, fillsPerMonth: num(inFills.value), perPlan };
+    if (existing) Object.assign(existing, data);
+    else state.rxs.push(data);
+    save(); renderAll(); close();
+    toast(existing ? "Prescription updated" : "Prescription added");
+  }
+}
+
+/* ---------- rendering ---------- */
+function renderPlans(){
+  const wrap = document.getElementById("planCards");
+  wrap.innerHTML = "";
+  if (!state.plans.length){
+    wrap.appendChild(h("div", {class:"empty", style:"grid-column:1/-1"}, "No plans yet. Add the plans you're choosing between — the numbers are on each plan's benefits summary."));
+    return;
+  }
+  for (const p of state.plans){
+    wrap.appendChild(h("div", {class:"plan-card"},
+      h("h3", null, p.name),
+      h("div", {class:"big"}, fmt(monthlyPremium(p)), h("small", null, " /mo premium")),
+      h("div", {class:"kv"}, h("span", null, "Deductible"), h("b", null, fmt(num(p.deductible)))),
+      h("div", {class:"kv"}, h("span", null, "OOP max"), h("b", null, fmt(num(p.oopMax)))),
+      h("div", {class:"kv"}, h("span", null, "PCP / Specialist / UC"), h("b", null, fmt(num(p.pcp))+" / "+fmt(num(p.spec))+" / "+fmt(num(p.uc)))),
+      num(p.hsa) ? h("div", {class:"kv"}, h("span", null, "Employer HSA/HRA"), h("b", null, fmt(num(p.hsa))+"/yr")) : null,
+      h("div", {class:"card-actions"},
+        h("button", {onclick:()=>planModal(p)}, "Edit"),
+        h("button", {class:"danger", onclick:()=>confirmModal("Delete plan", "Delete \""+p.name+"\"? Prescription tier settings for this plan are removed too.", ()=>{
+          state.plans = state.plans.filter(x=>x.id!==p.id);
+          for (const rx of state.rxs) if (rx.perPlan) delete rx.perPlan[p.id];
+          save(); renderAll(); toast("Plan deleted");
+        })}, "Delete")
+      )
+    ));
+  }
+}
+
+function renderRx(){
+  const wrap = document.getElementById("rxList");
+  wrap.innerHTML = "";
+  if (!state.rxs.length){
+    wrap.appendChild(h("div", {class:"empty", style:"margin-bottom:10px"}, "No prescriptions yet. Add what you actually fill — this is usually where plans differ the most."));
+  }
+  for (const rx of state.rxs){
+    const tierBits = state.plans.map(p=>{
+      const cfg = (rx.perPlan && rx.perPlan[p.id]) || {tier:"t1"};
+      const label = cfg.tier === "custom" ? fmt(num(cfg.customCost)) : cfg.tier.toUpperCase();
+      return p.name + ": " + label;
+    }).join(" · ");
+    wrap.appendChild(h("div", {class:"rx-row"},
+      h("span", {class:"name"}, rx.name),
+      h("span", {class:"meta"}, num(rx.fillsPerMonth) + " fill" + (num(rx.fillsPerMonth)===1?"":"s") + "/mo" + (tierBits ? " · " + tierBits : "")),
+      h("span", {class:"spacer"}),
+      h("button", {class:"link", onclick:()=>rxModal(rx)}, "Edit"),
+      h("button", {class:"link", style:"color:var(--danger)", onclick:()=>confirmModal("Delete prescription", "Delete \""+rx.name+"\"?", ()=>{
+        state.rxs = state.rxs.filter(x=>x.id!==rx.id);
+        save(); renderAll(); toast("Prescription deleted");
+      })}, "Delete")
+    ));
+  }
+}
+
+function renderVisits(){
+  const wrap = document.getElementById("visitInputs");
+  wrap.innerHTML = "";
+  const defs = [
+    ["pcp","Primary care visits / year","Checkups, sick visits — how many times a year you see your regular doctor."],
+    ["spec","Specialist visits / year","Visits to any specialist across the year."],
+    ["uc","Urgent care visits / year","Walk-in urgent care visits in a typical year."]
+  ];
+  for (const [key,label,hint] of defs){
+    const inp = h("input", {type:"number", min:"0", step:"1", value:state.visits[key] != null ? state.visits[key] : 0,
+      onchange: (e)=>{ state.visits[key] = num(e.target.value); save(); renderResults(); }});
+    wrap.appendChild(field(label, inp, hint));
+  }
+}
+
+function renderResults(){
+  const wrap = document.getElementById("results");
+  wrap.innerHTML = "";
+  if (!state.plans.length){
+    wrap.appendChild(h("div", {class:"empty"}, "Add at least one plan to see totals — two or more to compare."));
+    return;
+  }
+  const rows = state.plans.map(p=>({ p, t: totals(p) }));
+  rows.sort((a,b)=>a.t.totalYr - b.t.totalYr);
+  const winner = rows[0], runner = rows[1];
+
+  if (runner){
+    const diff = runner.t.totalYr - winner.t.totalYr;
+    const parts = [];
+    const cmp = (label, a, b, unit)=>{
+      const d = a - b;
+      if (Math.abs(d) < 0.005) return;
+      parts.push(label + ": " + winner.p.name + " is " + fmt(Math.abs(d)) + unit + (d < 0 ? " less" : " more"));
+    };
+    cmp("Premiums", winner.t.prem, runner.t.prem, "/mo");
+    cmp("Prescriptions", winner.t.rxMo, runner.t.rxMo, "/mo");
+    cmp("Office visits", winner.t.visMo, runner.t.visMo, "/mo");
+    const hd = winner.t.hsaMo - runner.t.hsaMo;
+    if (Math.abs(hd) >= 0.005) parts.push("Employer HSA/HRA: " + winner.p.name + " gets " + fmt(Math.abs(hd)) + "/mo " + (hd > 0 ? "more" : "less") + " free money");
+    wrap.appendChild(h("div", {class:"banner"},
+      h("div", {html: "<b>" + esc(winner.p.name) + "</b> comes out ahead — about <b>" + fmt(diff) + "/yr</b> (" + fmt(diff/12) + "/mo) cheaper than " + esc(runner.p.name) + " at your usage."}),
+      parts.length ? h("ul", null, ...parts.map(s=>h("li", null, s))) : null
+    ));
+  }
+
+  const table = h("table", null,
+    h("thead", null, h("tr", null,
+      ...["Plan","Premium /mo","Rx /mo","Visits /mo","HSA /mo","Total /mo","Total /yr","Worst case /yr"].map(x=>h("th", null, x))
+    )),
+    h("tbody", null, ...rows.map(({p,t})=>{
+      const win = runner && p.id === winner.p.id;
+      return h("tr", {class: win ? "winner" : ""},
+        h("td", null, p.name),
+        cell(t.prem), cell(t.rxMo), cell(t.visMo), cell(-t.hsaMo),
+        cell(t.totalMo, win), cell(t.totalYr, win), cell(t.worstYr)
+      );
+    }))
+  );
+  const tw = h("div", {class:"tablewrap"}, table);
+  wrap.appendChild(tw);
+  makeSortable(table);
+
+  if (state.rxs.length){
+    wrap.appendChild(h("h3", {style:"font-size:15px;margin:18px 0 6px"}, "Prescription cost per month, by plan"));
+    const rxTable = h("table", null,
+      h("thead", null, h("tr", null, h("th", null, "Prescription"), ...state.plans.map(p=>h("th", null, p.name)))),
+      h("tbody", null, ...state.rxs.map(rx=>h("tr", null,
+        h("td", null, rx.name + " (" + num(rx.fillsPerMonth) + "/mo)"),
+        ...state.plans.map(p=>{
+          const mo = num(rx.fillsPerMonth) * rxCostPerFill(rx, p);
+          return cell(mo);
+        })
+      )))
+    );
+    wrap.appendChild(h("div", {class:"tablewrap"}, rxTable));
+    makeSortable(rxTable);
+  }
+
+  function cell(v, win){
+    const td = h("td", {class: win ? "win" : ""}, fmt(v));
+    td.dataset.sort = v;
+    return td;
+  }
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function renderAll(){ renderPlans(); renderRx(); renderVisits(); renderResults(); }
+
+/* ---------- export / import ---------- */
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  const blob = new Blob([JSON.stringify(Object.assign({version:APP_VERSION}, state), null, 2)], {type:"application/json"});
+  const a = h("a", {href:URL.createObjectURL(blob), download:"copay-data.json"});
+  document.body.appendChild(a); a.click(); a.remove();
+  toast("Exported copay-data.json");
+});
+document.getElementById("importBtn").addEventListener("click", ()=>document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data.plans)) throw new Error("bad shape");
+      state = { plans: data.plans, rxs: data.rxs || [], visits: data.visits || {pcp:0,spec:0,uc:0} };
+      save(); renderAll(); toast("Data imported");
+    }catch(err){ toast("That file doesn't look like a Copay export"); }
+    e.target.value = "";
+  };
+  reader.readAsText(file);
+});
+
+/* ---------- boot ---------- */
+document.getElementById("addPlanBtn").addEventListener("click", ()=>planModal());
+document.getElementById("addRxBtn").addEventListener("click", ()=>rxModal());
+document.getElementById("verBadge").textContent = "v" + APP_VERSION;
+document.getElementById("verFoot").textContent = "Copay v" + APP_VERSION;
+if (DEMO) document.getElementById("demoBanner").hidden = false;
+load();
+renderAll();
+</script>
+</body>
+</html>
