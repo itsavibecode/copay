@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="app-version" content="0.5.0">
+<meta name="app-version" content="0.6.0">
 <meta name="description" content="Compare the real monthly and annual cost of health insurance plans: premiums, prescriptions, and office visits side by side.">
 <title>Copay — health plan cost estimator</title>
 <style>
@@ -172,7 +172,7 @@ textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 
 <script>
 "use strict";
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.6.0";
 const LS_KEY = "copay_v1";
 const TIERS = [
   ["t1","Tier 1 — Generic"],
@@ -209,6 +209,10 @@ function migrate(st){
     for (const k of SHARE_KEYS) mode[k] = (p.mode && p.mode[k]) || "copay";
     p.mode = mode;
     if (p.coins == null) p.coins = 20;
+    if (p.dentalName == null) p.dentalName = "";
+    if (p.dentalPrem == null) p.dentalPrem = 0;
+    if (p.visionPrem == null) p.visionPrem = 0;
+    if (p.dentalOopYr == null) p.dentalOopYr = 0;
   }
   for (const rx of st.rxs || []){
     if (rx.fills == null){ rx.fills = num(rx.fillsPerMonth); rx.per = "month"; }
@@ -248,9 +252,11 @@ function demoData(){
     plans: [
       { id:a, name:"Acme PPO 500", premium:235, period:"monthly", deductible:500, oopMax:4500, hsa:0, coins:20,
         pcp:25, spec:50, uc:60, rx:{t1:10,t2:35,t3:65,t4:150},
+        dentalName:"Acme Dental Basic", dentalPrem:24, visionPrem:0, dentalOopYr:80,
         mode:{pcp:"copay",spec:"copay",uc:"copay",t1:"copay",t2:"copay",t3:"copay",t4:"copay"} },
       { id:b, name:"Acme HDHP Saver", premium:152, period:"monthly", deductible:3200, oopMax:6000, hsa:750, coins:20,
         pcp:20, spec:20, uc:20, rx:{t1:15,t2:55,t3:95,t4:25},
+        dentalName:"", dentalPrem:0, visionPrem:0, dentalOopYr:350,
         mode:{pcp:"coins_ded",spec:"coins_ded",uc:"coins_ded",t1:"copay_ded",t2:"copay_ded",t3:"copay_ded",t4:"coins_ded"} }
     ],
     rxs: [
@@ -351,8 +357,13 @@ function payEvent(st, mode, copayTotal, C, pct){
 
 /* Month-by-month simulation of one plan year. Rules that need a retail price
    but don't have one degrade to plain copay (amount = what you pay). */
+function dentalMo(plan){
+  const per = PREMIUM_PERIODS.find(x=>x[0]===plan.period) || PREMIUM_PERIODS[0];
+  return (num(plan.dentalPrem) + num(plan.visionPrem)) * per[2] + num(plan.dentalOopYr)/12;
+}
 function simulate(plan, extraAnnual){
   const prem = monthlyPremium(plan);
+  const dentMo = dentalMo(plan);
   const hsaMo = num(plan.hsa)/12;
   const st = { ded: num(plan.deductible), dedPaid: 0,
                oopMax: num(plan.oopMax) > 0 ? num(plan.oopMax) : Infinity, oopPaid: 0 };
@@ -390,12 +401,12 @@ function simulate(plan, extraAnnual){
       const paid = payEvent(st, "coins_ded", 0, extraAnnual/12, num(plan.coins));
       extraPaid += paid; mo += paid;
     }
-    running += prem + mo - hsaMo;
+    running += prem + dentMo + mo - hsaMo;
     cum.push(running);
   }
-  return { prem, hsaMo, rxMo: rxPaid/12, visMo: visPaid/12, extraMo: extraPaid/12,
+  return { prem, dentMo, hsaMo, rxMo: rxPaid/12, visMo: visPaid/12, extraMo: extraPaid/12,
            totalMo: running/12, totalYr: running, cum,
-           worstYr: prem*12 + num(plan.oopMax) - num(plan.hsa) };
+           worstYr: prem*12 + dentMo*12 + num(plan.oopMax) - num(plan.hsa) };
 }
 
 /* ---------- sortable tables ---------- */
@@ -437,6 +448,10 @@ function planModal(existing){
   const inOop = h("input", {type:"number", min:"0", step:"1", value:p.oopMax});
   const inHsa = h("input", {type:"number", min:"0", step:"1", value:p.hsa});
   const inCoins = h("input", {type:"number", min:"0", max:"100", step:"1", value:p.coins});
+  const inDentName = h("input", {value:p.dentalName||"", placeholder:"e.g. BlueCare Dental 1B"});
+  const inDentPrem = h("input", {type:"number", min:"0", step:"0.01", value:p.dentalPrem||""});
+  const inVisPrem = h("input", {type:"number", min:"0", step:"0.01", value:p.visionPrem||""});
+  const inDentOop = h("input", {type:"number", min:"0", step:"1", value:p.dentalOopYr||""});
   const amtIn = {}, modeIn = {};
   function shareRow(key, label, amtVal, amtHint){
     amtIn[key] = h("input", {type:"number", min:"0", step:"0.01", value:amtVal!=null?amtVal:""});
@@ -467,6 +482,14 @@ function planModal(existing){
         field("Coinsurance for other care (%)", inCoins, "Your share of costs after the deductible for care not listed here — used by the what-if slider. Typically 10–30%.")
       )
     ),
+    h("fieldset", null, h("legend", null, "Dental & vision (optional)"),
+      h("div", {class:"grid2"},
+        field("Dental plan name", inDentName, "If this option bundles or pairs with a dental plan, name it here so the card shows it."),
+        field("Dental premium", inDentPrem, "Dental premium, billed the same way as the health premium above (monthly or per paycheck). Leave 0 if none."),
+        field("Vision premium", inVisPrem, "Vision premium if you'd carry one alongside this plan, billed the same way. Leave 0 if none."),
+        field("Expected dental/vision out-of-pocket ($/yr)", inDentOop, "Your estimate of yearly dental and vision costs you'd pay yourself on this option — cleanings, fillings, glasses. If a plan has no dental, put the cash price of your usual care here so the comparison stays fair.")
+      )
+    ),
     h("fieldset", null, h("legend", null, "Office visits — amount is $ per visit, or % if the rule is coinsurance"),
       shareRow("pcp", "Primary care", p.pcp, "Copay $ (or coinsurance %) for a regular doctor visit."),
       shareRow("spec", "Specialist", p.spec, "Copay $ (or coinsurance %) for a specialist visit (dermatologist, cardiologist, etc.)."),
@@ -492,6 +515,7 @@ function planModal(existing){
       id: existing ? existing.id : uid(),
       name, premium: num(inPrem.value), period: inPeriod.value,
       deductible: num(inDed.value), oopMax: num(inOop.value), hsa: num(inHsa.value), coins: num(inCoins.value),
+      dentalName: inDentName.value.trim(), dentalPrem: num(inDentPrem.value), visionPrem: num(inVisPrem.value), dentalOopYr: num(inDentOop.value),
       pcp: num(amtIn.pcp.value), spec: num(amtIn.spec.value), uc: num(amtIn.uc.value),
       rx: { t1:num(amtIn.t1.value), t2:num(amtIn.t2.value), t3:num(amtIn.t3.value), t4:num(amtIn.t4.value) },
       mode
@@ -585,6 +609,7 @@ function renderPlans(){
       h("div", {class:"kv"}, h("span", null, "OOP max"), h("b", null, fmt(num(p.oopMax)))),
       h("div", {class:"kv"}, h("span", null, "PCP / Specialist / UC"), h("b", null, fmtShare(p,"pcp",p.pcp)+" / "+fmtShare(p,"spec",p.spec)+" / "+fmtShare(p,"uc",p.uc))),
       num(p.hsa) ? h("div", {class:"kv"}, h("span", null, "Employer HSA/HRA"), h("b", null, fmt(num(p.hsa))+"/yr")) : null,
+      dentalMo(p) > 0.005 ? h("div", {class:"kv"}, h("span", null, "Dental & vision" + (p.dentalName ? " (" + p.dentalName + ")" : "")), h("b", null, fmt(dentalMo(p))+"/mo")) : null,
       Object.values(p.mode||{}).some(m=>m.indexOf("_ded")!==-1) ? h("div", {class:"kv"}, h("span", null, "* = after deductible")) : null,
       h("div", {class:"card-actions"},
         h("button", {onclick:()=>planModal(p)}, "Edit"),
@@ -683,6 +708,7 @@ function renderResults(){
     cmp("Premiums", winner.t.prem, runner.t.prem, "/mo");
     cmp("Prescriptions", winner.t.rxMo, runner.t.rxMo, "/mo");
     cmp("Office visits", winner.t.visMo, runner.t.visMo, "/mo");
+    cmp("Dental & vision", winner.t.dentMo, runner.t.dentMo, "/mo");
     if (whatIf > 0) cmp("Extra care", winner.t.extraMo, runner.t.extraMo, "/mo");
     const hd = winner.t.hsaMo - runner.t.hsaMo;
     if (Math.abs(hd) >= 0.005) parts.push("Employer HSA/HRA: " + winner.p.name + " gets " + fmt(Math.abs(hd)) + "/mo " + (hd > 0 ? "more" : "less") + " free money");
@@ -692,7 +718,9 @@ function renderResults(){
     ));
   }
 
+  const anyDental = rows.some(r=>r.t.dentMo > 0.005);
   const heads = ["Plan","Premium /mo","Rx /mo","Visits /mo"];
+  if (anyDental) heads.push("Dental /mo");
   if (whatIf > 0) heads.push("Extra /mo");
   heads.push("HSA /mo","Total /mo","Total /yr","Worst case /yr");
   const table = h("table", null,
@@ -700,6 +728,7 @@ function renderResults(){
     h("tbody", null, ...rows.map(({p,t})=>{
       const win = runner && p.id === winner.p.id;
       const tds = [h("td", null, p.name), cell(t.prem), cell(t.rxMo), cell(t.visMo)];
+      if (anyDental) tds.push(cell(t.dentMo));
       if (whatIf > 0) tds.push(cell(t.extraMo));
       tds.push(cell(-t.hsaMo), cell(t.totalMo, win), cell(t.totalYr, win), cell(t.worstYr));
       return h("tr", {class: win ? "winner" : ""}, ...tds);

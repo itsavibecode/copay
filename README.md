@@ -11,11 +11,13 @@ prescription still cheaper after its $20-higher premium?
 
 Live: https://itsavibecode.github.io/copay/ · Demo with sample data: add `?demo=1`
 
-## Features (v0.5)
+## Features (v0.6)
 
 - Compare any number of plans: premium (monthly or per-paycheck), deductible,
   out-of-pocket max, employer HSA/HRA contribution, PCP/specialist/urgent-care
-  visits, and four prescription tiers
+  visits, four prescription tiers, and optional **dental & vision** (premiums
+  plus an expected out-of-pocket estimate — so a plan that bundles dental
+  competes fairly against one where you'd pay for cleanings in cash)
 - Every cost has a **rule**: flat copay or % coinsurance, before or after the
   deductible — so PPOs and high-deductible plans are modeled the way they
   actually work
@@ -60,6 +62,15 @@ No accounts, no server, no analytics. Health and cost data never leaves your
 browser unless you export it yourself.
 
 ## Changelog
+
+### v0.6.0 — 2026-07-07
+
+Dental & vision. Real plan decisions are health + dental together — the
+monthly bill is one number — so each plan now takes optional dental and
+vision premiums (billed the same way as the health premium) plus an expected
+yearly out-of-pocket estimate for dental/vision care. It all flows into the
+totals, the chart, the worst-case column, and the winner breakdown, and a
+Dental column appears in the results whenever any plan has dental costs.
 
 ### v0.5.0 — 2026-07-07
 
